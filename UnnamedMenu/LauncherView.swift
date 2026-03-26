@@ -39,17 +39,27 @@ struct LauncherView: View {
                 Divider()
 
                 // Command list
-                List(Array(filteredCommands.enumerated()), id: \.element.id) { index, item in
-                    CommandRow(item: item, isSelected: index == selectedIndex)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
-                        .listRowBackground(Color.clear)
-                        .onTapGesture {
-                            selectedIndex = index
-                            runSelected()
+                ScrollViewReader { proxy in
+                    List(Array(filteredCommands.enumerated()), id: \.element.id) { index, item in
+                        CommandRow(item: item, isSelected: index == selectedIndex)
+                            .id(item.id)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
+                            .listRowBackground(Color.clear)
+                            .onTapGesture {
+                                selectedIndex = index
+                                runSelected()
+                            }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .frame(height: 270)
+                    .onChange(of: selectedIndex) { _, newIndex in
+                        guard filteredCommands.indices.contains(newIndex) else { return }
+                        withAnimation {
+                            proxy.scrollTo(filteredCommands[newIndex].id, anchor: nil)
                         }
+                    }
                 }
-                .listStyle(.plain)
-                .frame(maxHeight: 260)
 
                 // Output area
                 if !outputText.isEmpty {
