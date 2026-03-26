@@ -16,6 +16,11 @@
 			path = UnnamedMenu;
 			sourceTree = "<group>";
 		};
+		8E8E2A872F75EC4A0035F2C1 /* .claude */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = .claude;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -32,6 +37,7 @@
 		8E8E299F2F75EBBE0035F2C1 = {
 			isa = PBXGroup;
 			children = (
+				8E8E2A872F75EC4A0035F2C1 /* .claude */,
 				8E8E29AA2F75EBBE0035F2C1 /* UnnamedMenu */,
 				8E8E29A92F75EBBE0035F2C1 /* Products */,
 			);
