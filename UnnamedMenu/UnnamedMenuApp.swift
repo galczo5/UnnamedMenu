@@ -25,8 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let pipeConfigNotification   = "com.unnamedmenu.pipeConfig"
     private var pendingConfigURL: URL?
     private var pendingPipedItems: [CommandItem]?
-    private let showAllFlag     = CommandLine.arguments.contains("--all")
-    private let momentaryFlag   = CommandLine.arguments.contains("--momentary")
+    private let showAllFlag = CommandLine.arguments.contains("--all")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Suppress Dock icon for all invocations immediately. CLI-only invocations
@@ -86,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.showPanelNotification),
                     object: nil,
-                    userInfo: ["all": showAllFlag ? "1" : "0", "momentary": momentaryFlag ? "1" : "0"],
+                    userInfo: ["all": showAllFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
             }
@@ -136,8 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isMovableByWindowBackground = true
         showPanel()
 
-        appState.momentaryMode = momentaryFlag
-        appState.showAll = showAllFlag || momentaryFlag
+        appState.showAll = showAllFlag
         if let url = pendingConfigURL {
             appState.applyFilter(url: url)
         }
@@ -182,9 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showPanelFromNotification(_ note: Notification) {
-        let momentary = note.userInfo?["momentary"] as? String == "1"
-        appState.momentaryMode = momentary
-        appState.showAll = note.userInfo?["all"] as? String == "1" || momentary
+        appState.showAll = note.userInfo?["all"] as? String == "1"
         showPanel()
     }
 

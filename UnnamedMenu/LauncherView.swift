@@ -15,8 +15,6 @@ struct LauncherView: View {
     @State private var debounceTask: DispatchWorkItem? = nil
     @State private var selectedIndex = 0
     @FocusState private var isSearchFocused: Bool
-    @State private var cmdMonitor: Any? = nil
-
     var filteredCommands: [CommandItem] {
         if debouncedSearch.isEmpty {
             return appState.showAll ? appState.visibleCommands : []
@@ -100,7 +98,6 @@ struct LauncherView: View {
         }
         .onAppear {
             isSearchFocused = true
-            if appState.momentaryMode { startMomentaryMonitor() }
         }
         .onKeyPress(.upArrow)   { moveSelection(-1); return .handled }
         .onKeyPress(.downArrow) { moveSelection(+1); return .handled }
@@ -121,24 +118,7 @@ struct LauncherView: View {
         try? CommandRunner.run(command)
     }
 
-    private func startMomentaryMonitor() {
-        guard cmdMonitor == nil else { return }
-        cmdMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [self] event in
-            if !event.modifierFlags.contains(.command) {
-                stopMomentaryMonitor()
-                runSelected()
-            }
-            return event
-        }
-    }
-
-    private func stopMomentaryMonitor() {
-        if let m = cmdMonitor { NSEvent.removeMonitor(m) }
-        cmdMonitor = nil
-    }
-
     private func hideWindow() {
-        stopMomentaryMonitor()
         appState.clearFilter()
         NSApp.keyWindow?.close()
     }
