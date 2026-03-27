@@ -15,7 +15,7 @@ struct LauncherView: View {
     @FocusState private var isSearchFocused: Bool
 
     var filteredCommands: [CommandItem] {
-        guard !searchText.isEmpty else { return appState.commands }
+        guard !searchText.isEmpty else { return [] }
         return appState.commands
             .compactMap { item -> (score: Double, item: CommandItem)? in
                 let nameScore = FuzzyMatcher.score(query: searchText, in: item.name)
@@ -24,6 +24,7 @@ struct LauncherView: View {
                 return (best, item)
             }
             .sorted { $0.score > $1.score }
+            .prefix(5)
             .map { $0.item }
     }
 
@@ -103,8 +104,9 @@ struct LauncherView: View {
 
     private func runSelected() {
         guard filteredCommands.indices.contains(selectedIndex) else { return }
+        let command = filteredCommands[selectedIndex].command
         hideWindow()
-        NSWorkspace.shared.open(URL(fileURLWithPath: NSHomeDirectory()))
+        try? CommandRunner.run(command)
     }
 
     private func hideWindow() {
