@@ -36,7 +36,7 @@ struct WindowsGenerator {
         return results
     }
 
-    func generateItems() -> [[String: String]] {
+    func generateItems(recentPIDs: [pid_t] = []) -> [[String: String]] {
         let options: CGWindowListOption = [.excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return []
@@ -68,6 +68,18 @@ struct WindowsGenerator {
                 pids.append(pid)
                 pidToAppName[pid] = appName
             }
+        }
+
+        // Reorder by recency when a history is provided.
+        if !recentPIDs.isEmpty {
+            let pidsSet = Set(pids)
+            var sorted = recentPIDs.filter { pidsSet.contains($0) }
+            let seen = Set(sorted)
+            sorted += pids.filter { !seen.contains($0) }
+            // Move the current app (front of recency list) to the end so the
+            // previously visited app appears first.
+            if sorted.count > 1 { sorted.append(sorted.removeFirst()) }
+            pids = sorted
         }
 
         var items: [[String: String]] = []

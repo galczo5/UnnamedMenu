@@ -133,12 +133,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wsNC = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didLaunchApplicationNotification,
                      NSWorkspace.didTerminateApplicationNotification,
-                     NSWorkspace.activeSpaceDidChangeNotification,
-                     NSWorkspace.didActivateApplicationNotification] {
+                     NSWorkspace.activeSpaceDidChangeNotification] {
             wsNC.addObserver(forName: name, object: nil, queue: .main) { _ in
                 let trigger = name.rawValue.components(separatedBy: ".").last ?? name.rawValue
                 DispatchQueue.global(qos: .utility).async { WindowCache.rebuild(trigger: trigger) }
             }
+        }
+        wsNC.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { note in
+            if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
+                WindowVisitTracker.shared.record(app.processIdentifier)
+            }
+            DispatchQueue.global(qos: .utility).async { WindowCache.rebuild(trigger: "didActivateApplication") }
         }
 
         // Launcher panel
@@ -192,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let windows = note.userInfo?["windows"] as? Bool ?? false
             let all = note.userInfo?["all"] as? Bool ?? false
             if windows {
-                let items = WindowsGenerator().generateItems()
+                let items = WindowsGenerator().generateItems(recentPIDs: WindowVisitTracker.shared.history)
                 if let data = try? JSONSerialization.data(withJSONObject: items),
                    let decoded = try? JSONDecoder().decode([CommandItem].self, from: data) {
                     appState.applyItems(decoded)
