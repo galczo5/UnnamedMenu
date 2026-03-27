@@ -9,14 +9,14 @@ private struct WindowHeightKey: PreferenceKey {
 }
 
 struct LauncherView: View {
+    @EnvironmentObject var appState: AppState
     @State private var searchText = ""
     @State private var selectedIndex = 0
-    @State private var commands: [CommandItem] = []
     @FocusState private var isSearchFocused: Bool
 
     var filteredCommands: [CommandItem] {
-        guard !searchText.isEmpty else { return commands }
-        return commands.filter {
+        guard !searchText.isEmpty else { return appState.commands }
+        return appState.commands.filter {
             $0.name.localizedCaseInsensitiveContains(searchText) ||
             $0.command.localizedCaseInsensitiveContains(searchText)
         }
@@ -84,7 +84,6 @@ struct LauncherView: View {
         }
         .onAppear {
             isSearchFocused = true
-            commands = MenuLoader.load()
         }
         .onKeyPress(.upArrow)   { moveSelection(-1); return .handled }
         .onKeyPress(.downArrow) { moveSelection(+1); return .handled }
@@ -137,4 +136,5 @@ private struct CommandRow: View {
 
 #Preview {
     LauncherView()
+        .environmentObject(AppState())
 }

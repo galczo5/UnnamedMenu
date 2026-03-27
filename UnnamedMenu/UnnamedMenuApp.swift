@@ -1,10 +1,3 @@
-//
-//  UnnamedMenuApp.swift
-//  UnnamedMenu
-//
-//  Created by Kamil on 26/03/2026.
-//
-
 import SwiftUI
 import AppKit
 
@@ -24,14 +17,28 @@ private final class KeyablePanel: NSPanel {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: NSPanel!
+    private var statusItem: NSStatusItem!
+    let appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(.accessory)
 
         // Close any default windows SwiftUI may have created
         for window in NSApp.windows { window.close() }
 
-        let hostingView = NSHostingView(rootView: ContentView())
+        // Status bar icon
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem.button {
+            let image = NSImage(systemSymbolName: "terminal", accessibilityDescription: "UnnamedMenu")
+            image?.isTemplate = true
+            button.image = image
+        }
+
+        appState.reload()
+        rebuildMenu()
+
+        // Launcher panel
+        let hostingView = NSHostingView(rootView: ContentView().environmentObject(appState))
         hostingView.setFrameSize(hostingView.fittingSize)
 
         panel = KeyablePanel(
@@ -59,5 +66,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         return false
+    }
+
+    private func rebuildMenu() {
+        let menu = NSMenu()
+
+        let reload = NSMenuItem(title: "Reload Configuration", action: #selector(reloadConfig), keyEquivalent: "r")
+        reload.target = self
+        menu.addItem(reload)
+        menu.addItem(.separator())
+
+        if appState.loadedFileNames.isEmpty {
+            let none = NSMenuItem(title: "No config files loaded", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            menu.addItem(none)
+        } else {
+            for name in appState.loadedFileNames {
+                let item = NSMenuItem(title: name, action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+            }
+        }
+
+        statusItem.menu = menu
+    }
+
+    @objc private func reloadConfig() {
+        appState.reload()
+        rebuildMenu()
     }
 }
