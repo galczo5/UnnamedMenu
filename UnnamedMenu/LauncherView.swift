@@ -113,9 +113,15 @@ private struct CommandRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: item.systemImage)
-                .frame(width: 22)
-                .foregroundStyle(isSelected ? .white : Color(nsColor: .secondaryLabelColor))
+            if item.systemImage.hasPrefix("/") {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: item.systemImage))
+                    .resizable()
+                    .frame(width: 22, height: 22)
+            } else {
+                Image(systemName: item.systemImage)
+                    .frame(width: 22)
+                    .foregroundStyle(isSelected ? .white : Color(nsColor: .secondaryLabelColor))
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)

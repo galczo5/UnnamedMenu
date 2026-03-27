@@ -71,6 +71,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         let menu = NSMenu()
 
+        let open = NSMenuItem(title: "Open", action: #selector(openPanel), keyEquivalent: "")
+        open.target = self
+        menu.addItem(open)
+        menu.addItem(.separator())
+
+        let generate = NSMenuItem(title: "Generate applications.json", action: #selector(generateApplicationsJSON), keyEquivalent: "")
+        generate.target = self
+        menu.addItem(generate)
+        menu.addItem(.separator())
+
         let reload = NSMenuItem(title: "Reload Configuration", action: #selector(reloadConfig), keyEquivalent: "r")
         reload.target = self
         menu.addItem(reload)
@@ -91,7 +101,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
+    @objc private func openPanel() {
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc private func reloadConfig() {
+        appState.reload()
+        rebuildMenu()
+    }
+
+    @objc private func generateApplicationsJSON() {
+        guard ApplicationsGenerator().generate() else { return }
         appState.reload()
         rebuildMenu()
     }
