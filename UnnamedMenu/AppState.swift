@@ -7,6 +7,7 @@ final class AppState: ObservableObject {
     @Published var activeFilter: URL? = nil
     @Published var pipedItems: [CommandItem]? = nil
     @Published var showAll: Bool = false
+    @Published var momentaryMode: Bool = false
 
     private var itemsByURL: [URL: [CommandItem]] = [:]
 

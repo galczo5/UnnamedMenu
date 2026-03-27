@@ -11,17 +11,20 @@ private struct WindowHeightKey: PreferenceKey {
 struct LauncherView: View {
     @EnvironmentObject var appState: AppState
     @State private var searchText = ""
+    @State private var debouncedSearch = ""
+    @State private var debounceTask: DispatchWorkItem? = nil
     @State private var selectedIndex = 0
     @FocusState private var isSearchFocused: Bool
+    @State private var cmdMonitor: Any? = nil
 
     var filteredCommands: [CommandItem] {
-        if searchText.isEmpty {
+        if debouncedSearch.isEmpty {
             return appState.showAll ? appState.visibleCommands : []
         }
         let scored = appState.visibleCommands
             .compactMap { item -> (score: Double, item: CommandItem)? in
-                let nameScore = FuzzyMatcher.score(query: searchText, in: item.name)
-                let cmdScore  = FuzzyMatcher.score(query: searchText, in: item.command)
+                let nameScore = FuzzyMatcher.score(query: debouncedSearch, in: item.name)
+                let cmdScore  = FuzzyMatcher.score(query: debouncedSearch, in: item.command)
                 guard let best = [nameScore, cmdScore].compactMap({ $0 }).max() else { return nil }
                 return (best, item)
             }
@@ -42,7 +45,13 @@ struct LauncherView: View {
                     .font(.system(size: 18))
                     .focused($isSearchFocused)
                     .onSubmit { runSelected() }
-                    .onChange(of: searchText) { selectedIndex = 0 }
+                    .onChange(of: searchText) {
+                        selectedIndex = 0
+                        debounceTask?.cancel()
+                        let task = DispatchWorkItem { debouncedSearch = searchText }
+                        debounceTask = task
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: task)
+                    }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -91,16 +100,18 @@ struct LauncherView: View {
         }
         .onAppear {
             isSearchFocused = true
+            if appState.momentaryMode { startMomentaryMonitor() }
         }
         .onKeyPress(.upArrow)   { moveSelection(-1); return .handled }
         .onKeyPress(.downArrow) { moveSelection(+1); return .handled }
+        .onKeyPress(.tab)       { moveSelection(+1); return .handled }
         .onKeyPress(.escape)    { hideWindow();      return .handled }
     }
 
     private func moveSelection(_ delta: Int) {
         let count = filteredCommands.count
         guard count > 0 else { return }
-        selectedIndex = max(0, min(count - 1, selectedIndex + delta))
+        selectedIndex = (selectedIndex + delta + count) % count
     }
 
     private func runSelected() {
@@ -110,7 +121,24 @@ struct LauncherView: View {
         try? CommandRunner.run(command)
     }
 
+    private func startMomentaryMonitor() {
+        guard cmdMonitor == nil else { return }
+        cmdMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [self] event in
+            if !event.modifierFlags.contains(.command) {
+                stopMomentaryMonitor()
+                runSelected()
+            }
+            return event
+        }
+    }
+
+    private func stopMomentaryMonitor() {
+        if let m = cmdMonitor { NSEvent.removeMonitor(m) }
+        cmdMonitor = nil
+    }
+
     private func hideWindow() {
+        stopMomentaryMonitor()
         appState.clearFilter()
         NSApp.keyWindow?.close()
     }

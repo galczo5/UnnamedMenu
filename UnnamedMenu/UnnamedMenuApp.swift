@@ -25,7 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let pipeConfigNotification   = "com.unnamedmenu.pipeConfig"
     private var pendingConfigURL: URL?
     private var pendingPipedItems: [CommandItem]?
-    private let showAllFlag = CommandLine.arguments.contains("--all")
+    private let showAllFlag     = CommandLine.arguments.contains("--all")
+    private let momentaryFlag   = CommandLine.arguments.contains("--momentary")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if isatty(STDIN_FILENO) == 0 {
@@ -83,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.showPanelNotification),
                     object: nil,
-                    userInfo: ["all": showAllFlag ? "1" : "0"],
+                    userInfo: ["all": showAllFlag ? "1" : "0", "momentary": momentaryFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
                 exit(0)
@@ -124,14 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.hasShadow = true
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
-        panel.center()
-        panel.orderFrontRegardless()
-        DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-            self.panel.makeKeyAndOrderFront(nil)
-        }
+        showPanel()
 
-        appState.showAll = showAllFlag
+        appState.momentaryMode = momentaryFlag
+        appState.showAll = showAllFlag || momentaryFlag
         if let url = pendingConfigURL {
             appState.applyFilter(url: url)
         }
@@ -165,27 +162,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let items = try? JSONDecoder().decode([CommandItem].self, from: data) else { return }
         appState.showAll = note.userInfo?["all"] as? String == "1"
         appState.applyItems(items)
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        showPanel()
     }
 
     @objc private func filterConfigFromNotification(_ note: Notification) {
         guard let path = note.userInfo?["path"] as? String else { return }
         appState.showAll = note.userInfo?["all"] as? String == "1"
         appState.applyFilter(url: URL(fileURLWithPath: path))
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        showPanel()
     }
 
     @objc private func showPanelFromNotification(_ note: Notification) {
-        appState.showAll = note.userInfo?["all"] as? String == "1"
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        let momentary = note.userInfo?["momentary"] as? String == "1"
+        appState.momentaryMode = momentary
+        appState.showAll = note.userInfo?["all"] as? String == "1" || momentary
+        showPanel()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        showPanel()
         return false
     }
 
@@ -207,6 +202,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(reload)
         menu.addItem(.separator())
 
+        let quit = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(quit)
+        menu.addItem(.separator())
+
         if appState.loadedFileNames.isEmpty {
             let none = NSMenuItem(title: "No config files loaded", action: nil, keyEquivalent: "")
             none.isEnabled = false
@@ -222,9 +221,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
-    @objc private func openPanel() {
+    private func showPanel() {
+        let mouseLocation = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(mouseLocation) } ?? NSScreen.main ?? NSScreen.screens[0]
+        let sf = screen.visibleFrame
+        let pf = panel.frame
+        panel.setFrameOrigin(NSPoint(x: sf.midX - pf.width / 2, y: sf.maxY - sf.height * 0.33 - pf.height))
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func openPanel() {
+        showPanel()
     }
 
     @objc private func reloadConfig() {
