@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Open Terminal",
+    "command": "open -a Terminal",
+    "systemImage": "terminal"
+  },
+  {
+    "name": "Open Safari",
+    "command": "open -a Safari",
+    "systemImage": "safari"
+  },
+  {
+    "name": "Say Hello",
+    "command": "say hello",
+    "systemImage": "waveform"
+  },
+  {
+    "name": "List Home",
+    "command": "ls ~",
+    "systemImage": "folder"
+  }
+]

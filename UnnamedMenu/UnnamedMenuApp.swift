@@ -20,11 +20,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     let appState = AppState()
 
-    private static let showPanelNotification = "com.unnamedmenu.showPanel"
+    private static let showPanelNotification    = "com.unnamedmenu.showPanel"
+    private static let filterConfigNotification = "com.unnamedmenu.filterConfig"
+    private static let pipeConfigNotification   = "com.unnamedmenu.pipeConfig"
+    private var pendingConfigURL: URL?
+    private var pendingPipedItems: [CommandItem]?
+    private let showAllFlag = CommandLine.arguments.contains("--all")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if isatty(STDIN_FILENO) == 0 {
+            let data = FileHandle.standardInput.readDataToEndOfFile()
+            if let items = try? JSONDecoder().decode([CommandItem].self, from: data), !items.isEmpty {
+                let myPID = ProcessInfo.processInfo.processIdentifier
+                let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+                    .filter { $0.processIdentifier != myPID }
+                if others.first != nil {
+                    if let json = String(data: data, encoding: .utf8) {
+                        DistributedNotificationCenter.default().postNotificationName(
+                            NSNotification.Name(AppDelegate.pipeConfigNotification),
+                            object: nil,
+                            userInfo: ["json": json, "all": showAllFlag ? "1" : "0"],
+                            deliverImmediately: true
+                        )
+                    }
+                    exit(0)
+                }
+                pendingPipedItems = items
+            }
+        }
+
         if CommandLine.arguments.contains("--applications") {
             ApplicationsGenerator().generateForCLI()
+        }
+
+        if let idx = CommandLine.arguments.firstIndex(of: "--config"),
+           CommandLine.arguments.indices.contains(idx + 1) {
+            let url = URL(fileURLWithPath: CommandLine.arguments[idx + 1]).standardizedFileURL
+            let myPID = ProcessInfo.processInfo.processIdentifier
+            let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+                .filter { $0.processIdentifier != myPID }
+            if others.first != nil {
+                DistributedNotificationCenter.default().postNotificationName(
+                    NSNotification.Name(AppDelegate.filterConfigNotification),
+                    object: nil,
+                    userInfo: ["path": url.path, "all": showAllFlag ? "1" : "0"],
+                    deliverImmediately: true
+                )
+                exit(0)
+            }
+            pendingConfigURL = url
         }
 
         if CommandLine.arguments.contains("--open") {
@@ -35,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.showPanelNotification),
                     object: nil,
+                    userInfo: ["all": showAllFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
                 exit(0)
@@ -82,15 +127,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.panel.makeKeyAndOrderFront(nil)
         }
 
+        appState.showAll = showAllFlag
+        if let url = pendingConfigURL {
+            appState.applyFilter(url: url)
+        }
+        if let items = pendingPipedItems {
+            appState.applyItems(items)
+        }
+
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(showPanelFromNotification),
             name: NSNotification.Name(AppDelegate.showPanelNotification),
             object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(filterConfigFromNotification(_:)),
+            name: NSNotification.Name(AppDelegate.filterConfigNotification),
+            object: nil
+        )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(pipeConfigFromNotification(_:)),
+            name: NSNotification.Name(AppDelegate.pipeConfigNotification),
+            object: nil
+        )
     }
 
-    @objc private func showPanelFromNotification() {
+    @objc private func pipeConfigFromNotification(_ note: Notification) {
+        guard let json = note.userInfo?["json"] as? String,
+              let data = json.data(using: .utf8),
+              let items = try? JSONDecoder().decode([CommandItem].self, from: data) else { return }
+        appState.showAll = note.userInfo?["all"] as? String == "1"
+        appState.applyItems(items)
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func filterConfigFromNotification(_ note: Notification) {
+        guard let path = note.userInfo?["path"] as? String else { return }
+        appState.showAll = note.userInfo?["all"] as? String == "1"
+        appState.applyFilter(url: URL(fileURLWithPath: path))
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func showPanelFromNotification(_ note: Notification) {
+        appState.showAll = note.userInfo?["all"] as? String == "1"
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

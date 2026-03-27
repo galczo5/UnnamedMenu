@@ -4,6 +4,7 @@ enum MenuLoader {
     struct LoadResult {
         let items: [CommandItem]
         let fileNames: [String]
+        let itemsByURL: [URL: [CommandItem]]
     }
 
     static let configURL: URL = {
@@ -19,7 +20,7 @@ enum MenuLoader {
             entries = try fm.contentsOfDirectory(at: configURL, includingPropertiesForKeys: nil)
         } catch {
             print("[MenuLoader] Cannot read directory: \(error)")
-            return LoadResult(items: [], fileNames: [])
+            return LoadResult(items: [], fileNames: [], itemsByURL: [:])
         }
 
         let jsonFiles = entries
@@ -28,6 +29,7 @@ enum MenuLoader {
 
         var items: [CommandItem] = []
         var fileNames: [String] = []
+        var itemsByURL: [URL: [CommandItem]] = [:]
 
         for url in jsonFiles {
             guard let data = try? Data(contentsOf: url),
@@ -39,9 +41,10 @@ enum MenuLoader {
             print("[MenuLoader] Loaded \(url.lastPathComponent) — \(decoded.count) item(s)")
             items.append(contentsOf: decoded)
             fileNames.append(url.lastPathComponent)
+            itemsByURL[url.standardizedFileURL] = decoded
         }
 
         print("[MenuLoader] Total: \(items.count) option(s) from \(fileNames.count) file(s)")
-        return LoadResult(items: items, fileNames: fileNames)
+        return LoadResult(items: items, fileNames: fileNames, itemsByURL: itemsByURL)
     }
 }

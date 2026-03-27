@@ -15,8 +15,10 @@ struct LauncherView: View {
     @FocusState private var isSearchFocused: Bool
 
     var filteredCommands: [CommandItem] {
-        guard !searchText.isEmpty else { return [] }
-        return appState.commands
+        if searchText.isEmpty {
+            return appState.showAll ? appState.visibleCommands : []
+        }
+        let scored = appState.visibleCommands
             .compactMap { item -> (score: Double, item: CommandItem)? in
                 let nameScore = FuzzyMatcher.score(query: searchText, in: item.name)
                 let cmdScore  = FuzzyMatcher.score(query: searchText, in: item.command)
@@ -24,8 +26,7 @@ struct LauncherView: View {
                 return (best, item)
             }
             .sorted { $0.score > $1.score }
-            .prefix(5)
-            .map { $0.item }
+        return appState.showAll ? scored.map { $0.item } : Array(scored.prefix(5).map { $0.item })
     }
 
     var body: some View {
@@ -110,6 +111,7 @@ struct LauncherView: View {
     }
 
     private func hideWindow() {
+        appState.clearFilter()
         NSApp.keyWindow?.close()
     }
 }
