@@ -36,31 +36,13 @@ struct WindowsGenerator {
         return results
     }
 
-    func generateForCLI(allScreens: Bool = false) {
-        let options: CGWindowListOption = allScreens
-            ? [.excludeDesktopElements]
-            : [.optionOnScreenOnly, .excludeDesktopElements]
+    func generateItems() -> [[String: String]] {
+        let options: CGWindowListOption = [.excludeDesktopElements]
         guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
-            print("[]")
-            exit(0)
+            return []
         }
 
-        // Determine current screen filter (CGWindow coords: origin top-left of primary screen)
-        let primaryScreenHeight = NSScreen.screens.first.map { $0.frame.height + $0.frame.origin.y } ?? 0
-        let currentScreen: NSScreen? = {
-            if allScreens { return nil }
-            let mouse = NSEvent.mouseLocation
-            return NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-        }()
-
-        // Convert NSScreen frame to CGWindow coordinate space for intersection checks
-        func cgFrame(of screen: NSScreen) -> CGRect {
-            let f = screen.frame
-            return CGRect(x: f.origin.x, y: primaryScreenHeight - f.origin.y - f.height,
-                          width: f.width, height: f.height)
-        }
-
-        let screenCGFrame = currentScreen.map { cgFrame(of: $0) }
+        let screenCGFrame: CGRect? = nil
 
         // Only include user-facing apps (excludes GPU processes, helper services, etc.)
         let regularPIDs = Set(NSWorkspace.shared.runningApplications
@@ -105,21 +87,19 @@ struct WindowsGenerator {
                 axWindows = windows
             }
 
-            if allScreens {
-                // Supplement with brute force to get windows from other spaces.
-                // Deduplicate by CGWindowID.
-                var seenWids = Set<CGWindowID>()
-                for w in axWindows {
-                    var wid = CGWindowID(0)
-                    _AXUIElementGetWindow(w, &wid)
-                    if wid != 0 { seenWids.insert(wid) }
-                }
-                for w in windowsByBruteForce(pid) {
-                    var wid = CGWindowID(0)
-                    _AXUIElementGetWindow(w, &wid)
-                    if wid == 0 || seenWids.insert(wid).inserted {
-                        axWindows.append(w)
-                    }
+            // Supplement with brute force to get windows from other spaces.
+            // Deduplicate by CGWindowID.
+            var seenWids = Set<CGWindowID>()
+            for w in axWindows {
+                var wid = CGWindowID(0)
+                _AXUIElementGetWindow(w, &wid)
+                if wid != 0 { seenWids.insert(wid) }
+            }
+            for w in windowsByBruteForce(pid) {
+                var wid = CGWindowID(0)
+                _AXUIElementGetWindow(w, &wid)
+                if wid == 0 || seenWids.insert(wid).inserted {
+                    axWindows.append(w)
                 }
             }
 
@@ -138,6 +118,11 @@ struct WindowsGenerator {
             }
         }
 
+        return items
+    }
+
+    func generateForCLI() {
+        let items = generateItems()
         let data = (try? JSONSerialization.data(withJSONObject: items, options: [.prettyPrinted])) ?? Data("[]".utf8)
         print(String(data: data, encoding: .utf8) ?? "[]")
         exit(0)

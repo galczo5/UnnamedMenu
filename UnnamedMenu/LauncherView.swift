@@ -99,10 +99,17 @@ struct LauncherView: View {
         .onAppear {
             isSearchFocused = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            searchText = ""
+            debouncedSearch = ""
+            debounceTask?.cancel()
+            selectedIndex = 0
+            isSearchFocused = true
+        }
         .onKeyPress(.upArrow)   { moveSelection(-1); return .handled }
         .onKeyPress(.downArrow) { moveSelection(+1); return .handled }
-        .onKeyPress(.tab)       { moveSelection(+1); return .handled }
         .onKeyPress(.escape)    { hideWindow();      return .handled }
+        .onReceive(NotificationCenter.default.publisher(for: .tabKeyPressed)) { _ in moveSelection(+1) }
     }
 
     private func moveSelection(_ delta: Int) {

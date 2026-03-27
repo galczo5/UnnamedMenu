@@ -13,6 +13,18 @@ struct UnnamedMenuApp: App {
 private final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown && event.keyCode == 48 {
+            NotificationCenter.default.post(name: .tabKeyPressed, object: nil)
+            return
+        }
+        super.sendEvent(event)
+    }
+}
+
+extension Notification.Name {
+    static let tabKeyPressed = Notification.Name("tabKeyPressed")
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -28,17 +40,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let showAllFlag = CommandLine.arguments.contains("--all")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Suppress Dock icon for all invocations immediately. CLI-only invocations
-        // (--windows, --applications) call exit(0) early and would otherwise briefly
-        // appear as regular Dock entries when keybindings are pressed rapidly.
-        NSApp.setActivationPolicy(.accessory)
-
         // CLI-only generators — print JSON and exit, no UI or instance logic needed.
         if CommandLine.arguments.contains("--applications") {
             ApplicationsGenerator().generateForCLI()
         }
-        if CommandLine.arguments.contains("--windows") {
-            WindowsGenerator().generateForCLI(allScreens: CommandLine.arguments.contains("--all-screens"))
+        let windowsFlag = CommandLine.arguments.contains("--windows")
+        let openFlag = CommandLine.arguments.contains("--open")
+        if windowsFlag && !openFlag {
+            if let cached = WindowCache.read() {
+                print(cached)
+                exit(0)
+            }
+            WindowsGenerator().generateForCLI()
         }
 
         // Use an exclusive non-blocking file lock to determine the main instance.
@@ -54,9 +67,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lock.l_len = 0
         let isMainInstance = lockFd >= 0 && fcntl(lockFd, F_SETLK, &lock) != -1
 
-        // Read piped input (blocks until the upstream process closes the pipe).
+        // --windows --open: inject windows JSON as piped input (prefer cache written by main instance).
         var pipedData: Data?
-        if isatty(STDIN_FILENO) == 0 {
+        if windowsFlag && openFlag {
+            let tOpen0 = Date()
+            if let cached = WindowCache.read() {
+                pipedData = cached.data(using: .utf8)
+                print("[--windows --open] cache hit: \(Int(Date().timeIntervalSince(tOpen0) * 1000))ms")
+            } else {
+                print("[--windows --open] cache miss, running live enumeration")
+                let items = WindowsGenerator().generateItems()
+                pipedData = try? JSONSerialization.data(withJSONObject: items)
+                print("[--windows --open] live enumeration: \(Int(Date().timeIntervalSince(tOpen0) * 1000))ms")
+            }
+        } else if isatty(STDIN_FILENO) == 0 {
+            // Read piped input (blocks until the upstream process closes the pipe).
             let data = FileHandle.standardInput.readDataToEndOfFile()
             if !data.isEmpty { pipedData = data }
         }
@@ -115,6 +140,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         appState.reload()
         rebuildMenu()
+
+        DispatchQueue.global(qos: .utility).async { WindowCache.rebuild(trigger: "launch") }
+        let wsNC = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification,
+                     NSWorkspace.didTerminateApplicationNotification,
+                     NSWorkspace.activeSpaceDidChangeNotification,
+                     NSWorkspace.didActivateApplicationNotification] {
+            wsNC.addObserver(forName: name, object: nil, queue: .main) { _ in
+                let trigger = name.rawValue.components(separatedBy: ".").last ?? name.rawValue
+                DispatchQueue.global(qos: .utility).async { WindowCache.rebuild(trigger: trigger) }
+            }
+        }
 
         // Launcher panel
         let hostingView = NSHostingView(rootView: ContentView().environmentObject(appState))
