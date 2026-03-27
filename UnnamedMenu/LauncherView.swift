@@ -1,10 +1,16 @@
 import SwiftUI
 import AppKit
 
+private struct WindowHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct LauncherView: View {
     @State private var searchText = ""
     @State private var selectedIndex = 0
-    @State private var outputText = ""
     @FocusState private var isSearchFocused: Bool
 
     var filteredCommands: [CommandItem] {
@@ -16,66 +22,65 @@ struct LauncherView: View {
     }
 
     var body: some View {
-        ZStack {
-            VisualEffectView()
+        VStack(spacing: 0) {
+            // Search bar
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 18, weight: .medium))
 
-            VStack(spacing: 0) {
-                // Search bar
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.system(size: 18, weight: .medium))
+                TextField("Search commands…", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 18))
+                    .focused($isSearchFocused)
+                    .onSubmit { runSelected() }
+                    .onChange(of: searchText) { selectedIndex = 0 }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
 
-                    TextField("Search commands…", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 18))
-                        .focused($isSearchFocused)
-                        .onSubmit { runSelected() }
-                        .onChange(of: searchText) { selectedIndex = 0 }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+            Divider()
 
-                Divider()
-
-                // Command list
-                ScrollViewReader { proxy in
-                    List(Array(filteredCommands.enumerated()), id: \.element.id) { index, item in
-                        CommandRow(item: item, isSelected: index == selectedIndex)
-                            .id(item.id)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
-                            .listRowBackground(Color.clear)
-                            .onTapGesture {
-                                selectedIndex = index
-                                runSelected()
-                            }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .frame(height: 270)
-                    .onChange(of: selectedIndex) { _, newIndex in
-                        guard filteredCommands.indices.contains(newIndex) else { return }
-                        withAnimation {
-                            proxy.scrollTo(filteredCommands[newIndex].id, anchor: nil)
+            // Command list
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(filteredCommands.enumerated()), id: \.element.id) { index, item in
+                            CommandRow(item: item, isSelected: index == selectedIndex)
+                                .id(item.id)
+                                .onTapGesture {
+                                    selectedIndex = index
+                                    runSelected()
+                                }
                         }
                     }
                 }
-
-                // Output area
-                if !outputText.isEmpty {
-                    Divider()
-                    ScrollView {
-                        Text(outputText)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
+                .scrollIndicators(.never)
+                .frame(height: min(CGFloat(filteredCommands.count) * 46, 270))
+                .onChange(of: selectedIndex) { _, newIndex in
+                    guard filteredCommands.indices.contains(newIndex) else { return }
+                    withAnimation {
+                        proxy.scrollTo(filteredCommands[newIndex].id, anchor: nil)
                     }
-                    .frame(height: 120)
                 }
             }
         }
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .preference(key: WindowHeightKey.self, value: geo.size.height)
+            }
+        )
+        .background(VisualEffectView())
         .frame(width: 600)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onPreferenceChange(WindowHeightKey.self) { height in
+            guard height > 0, let window = NSApp.keyWindow else { return }
+            var frame = window.frame
+            frame.origin.y += frame.height - height
+            frame.size.height = height
+            window.setFrame(frame, display: true, animate: false)
+        }
         .onAppear { isSearchFocused = true }
         .onKeyPress(.upArrow)   { moveSelection(-1); return .handled }
         .onKeyPress(.downArrow) { moveSelection(+1); return .handled }
@@ -90,11 +95,8 @@ struct LauncherView: View {
 
     private func runSelected() {
         guard filteredCommands.indices.contains(selectedIndex) else { return }
-        let command = filteredCommands[selectedIndex].command
-        Task.detached {
-            let result = (try? CommandRunner.run(command)) ?? "(no output)"
-            await MainActor.run { outputText = result }
-        }
+        hideWindow()
+        NSWorkspace.shared.open(URL(fileURLWithPath: NSHomeDirectory()))
     }
 
     private func hideWindow() {
@@ -110,25 +112,22 @@ private struct CommandRow: View {
         HStack(spacing: 12) {
             Image(systemName: item.systemImage)
                 .frame(width: 22)
-                .foregroundStyle(isSelected ? .white : .secondary)
+                .foregroundStyle(isSelected ? .white : Color(nsColor: .secondaryLabelColor))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(isSelected ? .white : .primary)
+                    .foregroundStyle(isSelected ? .white : Color(nsColor: .labelColor))
                 Text(item.command)
                     .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
+                    .foregroundStyle(isSelected ? .white.opacity(0.8) : Color(nsColor: .secondaryLabelColor))
             }
 
             Spacer()
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.accentColor : Color.clear)
-        )
+        .background(isSelected ? Color.accentColor : Color.clear)
     }
 }
 
