@@ -109,7 +109,8 @@ struct LauncherView: View {
         .onKeyPress(.upArrow)   { moveSelection(-1); return .handled }
         .onKeyPress(.downArrow) { moveSelection(+1); return .handled }
         .onKeyPress(.escape)    { hideWindow();      return .handled }
-        .onReceive(NotificationCenter.default.publisher(for: .tabKeyPressed)) { _ in moveSelection(+1) }
+        .onReceive(NotificationCenter.default.publisher(for: .menuCycleSelection)) { _ in moveSelection(+1) }
+        .onReceive(NotificationCenter.default.publisher(for: .menuRunSelected)) { _ in runSelected() }
     }
 
     private func moveSelection(_ delta: Int) {
@@ -126,6 +127,7 @@ struct LauncherView: View {
     }
 
     private func hideWindow() {
+        KeybindingService.shared.clearHeldModifiers()
         appState.clearFilter()
         NSApp.keyWindow?.close()
     }

@@ -13,18 +13,6 @@ struct UnnamedMenuApp: App {
 private final class KeyablePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
-
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown && event.keyCode == 48 {
-            NotificationCenter.default.post(name: .tabKeyPressed, object: nil)
-            return
-        }
-        super.sendEvent(event)
-    }
-}
-
-extension Notification.Name {
-    static let tabKeyPressed = Notification.Name("tabKeyPressed")
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -198,6 +186,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSNotification.Name(AppDelegate.pipeConfigNotification),
             object: nil
         )
+
+        NotificationCenter.default.addObserver(forName: .menuShowPanel, object: nil, queue: .main) { [weak self] note in
+            guard let self else { return }
+            let windows = note.userInfo?["windows"] as? Bool ?? false
+            let all = note.userInfo?["all"] as? Bool ?? false
+            if windows {
+                let items = WindowsGenerator().generateItems()
+                if let data = try? JSONSerialization.data(withJSONObject: items),
+                   let decoded = try? JSONDecoder().decode([CommandItem].self, from: data) {
+                    appState.applyItems(decoded)
+                }
+            }
+            appState.showAll = all
+            showPanel()
+        }
+
+        KeybindingService.shared.start()
     }
 
     @objc private func pipeConfigFromNotification(_ note: Notification) {
@@ -239,9 +244,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(generate)
         menu.addItem(.separator())
 
-        let reload = NSMenuItem(title: "Reload Configuration", action: #selector(reloadConfig), keyEquivalent: "r")
-        reload.target = self
-        menu.addItem(reload)
+        let openConfig = NSMenuItem(title: "Open config file", action: #selector(openConfigFile), keyEquivalent: "")
+        openConfig.target = self
+        menu.addItem(openConfig)
+
+        let reloadConfig = NSMenuItem(title: "Reload config file", action: #selector(reloadConfig), keyEquivalent: "r")
+        reloadConfig.target = self
+        menu.addItem(reloadConfig)
+
+        let resetConfig = NSMenuItem(title: "Reset config file", action: #selector(resetConfigFile), keyEquivalent: "")
+        resetConfig.target = self
+        menu.addItem(resetConfig)
         menu.addItem(.separator())
 
         let quit = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -279,7 +292,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func reloadConfig() {
         appState.reload()
+        MenuConfig.shared.reload()
+        KeybindingService.shared.restart()
         rebuildMenu()
+    }
+
+    @objc private func openConfigFile() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: MenuConfigLoader.filePath))
+    }
+
+    @objc private func resetConfigFile() {
+        MenuConfigLoader.write(MenuConfigData.defaults)
+        MenuConfig.shared.reload()
+        KeybindingService.shared.restart()
     }
 
     @objc private func generateApplicationsJSON() {
