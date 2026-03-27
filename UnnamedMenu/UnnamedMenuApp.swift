@@ -29,70 +29,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let momentaryFlag   = CommandLine.arguments.contains("--momentary")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if isatty(STDIN_FILENO) == 0 {
-            let data = FileHandle.standardInput.readDataToEndOfFile()
-            if let items = try? JSONDecoder().decode([CommandItem].self, from: data), !items.isEmpty {
-                let myPID = ProcessInfo.processInfo.processIdentifier
-                let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
-                    .filter { $0.processIdentifier != myPID }
-                if others.first != nil {
-                    if let json = String(data: data, encoding: .utf8) {
-                        DistributedNotificationCenter.default().postNotificationName(
-                            NSNotification.Name(AppDelegate.pipeConfigNotification),
-                            object: nil,
-                            userInfo: ["json": json, "all": showAllFlag ? "1" : "0"],
-                            deliverImmediately: true
-                        )
-                    }
-                    exit(0)
-                }
-                pendingPipedItems = items
-            }
-        }
+        // Suppress Dock icon for all invocations immediately. CLI-only invocations
+        // (--windows, --applications) call exit(0) early and would otherwise briefly
+        // appear as regular Dock entries when keybindings are pressed rapidly.
+        NSApp.setActivationPolicy(.accessory)
 
+        // CLI-only generators — print JSON and exit, no UI or instance logic needed.
         if CommandLine.arguments.contains("--applications") {
             ApplicationsGenerator().generateForCLI()
         }
-
         if CommandLine.arguments.contains("--windows") {
-            WindowsGenerator().generateForCLI()
+            WindowsGenerator().generateForCLI(allScreens: CommandLine.arguments.contains("--all-screens"))
         }
 
-        if let idx = CommandLine.arguments.firstIndex(of: "--config"),
-           CommandLine.arguments.indices.contains(idx + 1) {
-            let url = URL(fileURLWithPath: CommandLine.arguments[idx + 1]).standardizedFileURL
-            let myPID = ProcessInfo.processInfo.processIdentifier
-            let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
-                .filter { $0.processIdentifier != myPID }
-            if others.first != nil {
+        // Use an exclusive non-blocking file lock to determine the main instance.
+        // flock() is atomic — no race window between concurrent launches.
+        // The lock is held until the process exits (fd stays open for app lifetime).
+        let lockPath = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("com.unnamedmenu.instance.lock")
+        let lockFd = Darwin.open(lockPath, O_CREAT | O_RDWR, mode_t(0o644))
+        var lock = Darwin.flock()
+        lock.l_type = Int16(F_WRLCK)
+        lock.l_whence = Int16(SEEK_SET)
+        lock.l_start = 0
+        lock.l_len = 0
+        let isMainInstance = lockFd >= 0 && fcntl(lockFd, F_SETLK, &lock) != -1
+
+        // Read piped input (blocks until the upstream process closes the pipe).
+        var pipedData: Data?
+        if isatty(STDIN_FILENO) == 0 {
+            let data = FileHandle.standardInput.readDataToEndOfFile()
+            if !data.isEmpty { pipedData = data }
+        }
+
+        if !isMainInstance {
+            // Another instance owns the lock — delegate and exit.
+            if let data = pipedData,
+               let items = try? JSONDecoder().decode([CommandItem].self, from: data), !items.isEmpty,
+               let json = String(data: data, encoding: .utf8) {
+                DistributedNotificationCenter.default().postNotificationName(
+                    NSNotification.Name(AppDelegate.pipeConfigNotification),
+                    object: nil,
+                    userInfo: ["json": json, "all": showAllFlag ? "1" : "0"],
+                    deliverImmediately: true
+                )
+            } else if let idx = CommandLine.arguments.firstIndex(of: "--config"),
+                      CommandLine.arguments.indices.contains(idx + 1) {
+                let url = URL(fileURLWithPath: CommandLine.arguments[idx + 1]).standardizedFileURL
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.filterConfigNotification),
                     object: nil,
                     userInfo: ["path": url.path, "all": showAllFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
-                exit(0)
-            }
-            pendingConfigURL = url
-        }
-
-        if CommandLine.arguments.contains("--open") {
-            let myPID = ProcessInfo.processInfo.processIdentifier
-            let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
-                .filter { $0.processIdentifier != myPID }
-            if others.first != nil {
+            } else if CommandLine.arguments.contains("--open") {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.showPanelNotification),
                     object: nil,
                     userInfo: ["all": showAllFlag ? "1" : "0", "momentary": momentaryFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
-                exit(0)
             }
-            // No existing instance — fall through to normal launch
+            exit(0)
         }
 
-        NSApp.setActivationPolicy(.accessory)
+        // We are the main instance — set up UI.
+        if let data = pipedData,
+           let items = try? JSONDecoder().decode([CommandItem].self, from: data), !items.isEmpty {
+            pendingPipedItems = items
+        }
+        if let idx = CommandLine.arguments.firstIndex(of: "--config"),
+           CommandLine.arguments.indices.contains(idx + 1) {
+            pendingConfigURL = URL(fileURLWithPath: CommandLine.arguments[idx + 1]).standardizedFileURL
+        }
 
         // Close any default windows SwiftUI may have created
         for window in NSApp.windows { window.close() }
