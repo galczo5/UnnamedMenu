@@ -139,6 +139,8 @@ private struct CommandRow: View {
                 Text(item.command)
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(isSelected ? .white.opacity(0.8) : Color(nsColor: .secondaryLabelColor))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
 
             Spacer()

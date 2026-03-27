@@ -53,6 +53,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ApplicationsGenerator().generateForCLI()
         }
 
+        if CommandLine.arguments.contains("--windows") {
+            WindowsGenerator().generateForCLI()
+        }
+
         if let idx = CommandLine.arguments.firstIndex(of: "--config"),
            CommandLine.arguments.indices.contains(idx + 1) {
             let url = URL(fileURLWithPath: CommandLine.arguments[idx + 1]).standardizedFileURL
