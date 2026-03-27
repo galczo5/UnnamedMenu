@@ -20,7 +20,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     let appState = AppState()
 
+    private static let showPanelNotification = "com.unnamedmenu.showPanel"
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if CommandLine.arguments.contains("--applications") {
+            ApplicationsGenerator().generateForCLI()
+        }
+
+        if CommandLine.arguments.contains("--open") {
+            let myPID = ProcessInfo.processInfo.processIdentifier
+            let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+                .filter { $0.processIdentifier != myPID }
+            if others.first != nil {
+                DistributedNotificationCenter.default().postNotificationName(
+                    NSNotification.Name(AppDelegate.showPanelNotification),
+                    object: nil,
+                    deliverImmediately: true
+                )
+                exit(0)
+            }
+            // No existing instance — fall through to normal launch
+        }
+
         NSApp.setActivationPolicy(.accessory)
 
         // Close any default windows SwiftUI may have created
@@ -60,6 +81,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
             self.panel.makeKeyAndOrderFront(nil)
         }
+
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(showPanelFromNotification),
+            name: NSNotification.Name(AppDelegate.showPanelNotification),
+            object: nil
+        )
+    }
+
+    @objc private func showPanelFromNotification() {
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {

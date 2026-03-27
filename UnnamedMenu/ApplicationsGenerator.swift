@@ -7,6 +7,19 @@ final class ApplicationsGenerator {
         self.outputURL = outputURL
     }
 
+    /// Discovers apps, serializes to JSON, prints to stdout, and exits.
+    /// Only call from a CLI context — does not return.
+    func generateForCLI() -> Never {
+        let entries = discoverApps()
+        guard let data = try? JSONSerialization.data(withJSONObject: entries, options: [.prettyPrinted, .sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else {
+            fputs("[ApplicationsGenerator] Failed to serialize JSON\n", stderr)
+            exit(1)
+        }
+        print(json)
+        exit(0)
+    }
+
     /// Discovers all installed apps and writes applications.json.
     /// Returns `true` on success, `false` on write failure.
     @discardableResult
