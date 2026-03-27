@@ -16,10 +16,15 @@ struct LauncherView: View {
 
     var filteredCommands: [CommandItem] {
         guard !searchText.isEmpty else { return appState.commands }
-        return appState.commands.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.command.localizedCaseInsensitiveContains(searchText)
-        }
+        return appState.commands
+            .compactMap { item -> (score: Double, item: CommandItem)? in
+                let nameScore = FuzzyMatcher.score(query: searchText, in: item.name)
+                let cmdScore  = FuzzyMatcher.score(query: searchText, in: item.command)
+                guard let best = [nameScore, cmdScore].compactMap({ $0 }).max() else { return nil }
+                return (best, item)
+            }
+            .sorted { $0.score > $1.score }
+            .map { $0.item }
     }
 
     var body: some View {
