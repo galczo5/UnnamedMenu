@@ -3,7 +3,39 @@ import AppKit
 import CoreGraphics
 import ApplicationServices
 
+@_silgen_name("_AXUIElementGetWindow") @discardableResult
+private func _AXUIElementGetWindow(_ axUiElement: AXUIElement, _ wid: UnsafeMutablePointer<CGWindowID>) -> AXError
+
+@_silgen_name("_AXUIElementCreateWithRemoteToken") @discardableResult
+private func _AXUIElementCreateWithRemoteToken(_ data: CFData) -> Unmanaged<AXUIElement>?
+
 struct WindowsGenerator {
+
+    // Enumerates windows from all spaces by probing AX element IDs directly.
+    // Standard kAXWindowsAttribute only returns windows on the current space;
+    // this approach (borrowed from alt-tab-macos) finds windows on other spaces too.
+    private func windowsByBruteForce(_ pid: pid_t) -> [AXUIElement] {
+        var token = Data(count: 20)
+        token.replaceSubrange(0..<4, with: withUnsafeBytes(of: pid) { Data($0) })
+        token.replaceSubrange(4..<8, with: withUnsafeBytes(of: Int32(0)) { Data($0) })
+        token.replaceSubrange(8..<12, with: withUnsafeBytes(of: Int32(0x636f636f)) { Data($0) })
+        var results = [AXUIElement]()
+        let start = Date()
+        for id: UInt64 in 0..<1000 {
+            token.replaceSubrange(12..<20, with: withUnsafeBytes(of: id) { Data($0) })
+            if let element = _AXUIElementCreateWithRemoteToken(token as CFData)?.takeRetainedValue() {
+                var subrole: CFTypeRef?
+                if AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
+                   let subroleStr = subrole as? String,
+                   [kAXStandardWindowSubrole, kAXDialogSubrole].contains(subroleStr) {
+                    results.append(element)
+                }
+            }
+            if Date().timeIntervalSince(start) > 0.1 { break }
+        }
+        return results
+    }
+
     func generateForCLI(allScreens: Bool = false) {
         let options: CGWindowListOption = allScreens
             ? [.excludeDesktopElements]
@@ -64,20 +96,45 @@ struct WindowsGenerator {
             let appBundlePath = NSRunningApplication(processIdentifier: pid)?.bundleURL?.path
             let iconValue = appBundlePath ?? "macwindow"
 
+            // Get windows via standard AX (current space only)
+            var axWindows: [AXUIElement] = []
             let appElement = AXUIElementCreateApplication(pid)
             var windowsValue: CFTypeRef?
-            let axResult = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsValue)
+            if AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+               let windows = windowsValue as? [AXUIElement] {
+                axWindows = windows
+            }
 
-            if axResult == .success, let windows = windowsValue as? [AXUIElement], !windows.isEmpty {
-                for window in windows {
+            if allScreens {
+                // Supplement with brute force to get windows from other spaces.
+                // Deduplicate by CGWindowID.
+                var seenWids = Set<CGWindowID>()
+                for w in axWindows {
+                    var wid = CGWindowID(0)
+                    _AXUIElementGetWindow(w, &wid)
+                    if wid != 0 { seenWids.insert(wid) }
+                }
+                for w in windowsByBruteForce(pid) {
+                    var wid = CGWindowID(0)
+                    _AXUIElementGetWindow(w, &wid)
+                    if wid == 0 || seenWids.insert(wid).inserted {
+                        axWindows.append(w)
+                    }
+                }
+            }
+
+            if axWindows.isEmpty {
+                items.append(["name": appName, "command": command, "systemImage": iconValue])
+            } else {
+                var seenTitles = Set<String>()
+                for window in axWindows {
                     var titleValue: CFTypeRef?
                     AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleValue)
                     let windowTitle = titleValue as? String ?? ""
+                    guard seenTitles.insert(windowTitle).inserted else { continue }
                     let name = windowTitle.isEmpty ? appName : "\(appName) - \(windowTitle)"
                     items.append(["name": name, "command": command, "systemImage": iconValue])
                 }
-            } else {
-                items.append(["name": appName, "command": command, "systemImage": iconValue])
             }
         }
 
