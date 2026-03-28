@@ -143,7 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
                 WindowVisitTracker.shared.record(app.processIdentifier)
             }
-            DispatchQueue.global(qos: .utility).async { WindowCache.rebuild(trigger: "didActivateApplication") }
+            let recentPIDs = WindowVisitTracker.shared.history
+            DispatchQueue.global(qos: .utility).async { WindowCache.rebuild(trigger: "didActivateApplication", recentPIDs: recentPIDs) }
         }
 
         // Launcher panel
@@ -197,7 +198,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let windows = note.userInfo?["windows"] as? Bool ?? false
             let all = note.userInfo?["all"] as? Bool ?? false
             if windows {
-                let items = WindowsGenerator().generateItems(recentPIDs: WindowVisitTracker.shared.history)
+                // Prefer the background-maintained cache for instant response;
+                // fall back to live enumeration only if the cache is cold.
+                // Reorder at read time using the always-fresh visit history.
+                let items: [[String: String]]
+                if let cached = WindowCache.read(),
+                   let data = cached.data(using: .utf8),
+                   let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: String]] {
+                    items = WindowCache.reorderedByVisitHistory(parsed)
+                } else {
+                    items = WindowsGenerator().generateItems(recentPIDs: WindowVisitTracker.shared.history)
+                }
                 if let data = try? JSONSerialization.data(withJSONObject: items),
                    let decoded = try? JSONDecoder().decode([CommandItem].self, from: data) {
                     appState.applyItems(decoded)
