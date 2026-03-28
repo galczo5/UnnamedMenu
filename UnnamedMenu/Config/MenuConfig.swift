@@ -16,6 +16,8 @@ final class MenuConfig {
     var searchPlaceholder: String { data.config!.display!.searchPlaceholder! }
     var maxResults: Int           { data.config!.display!.maxResults! }
     var maxResultsAll: Int        { data.config!.display!.maxResultsAll! }
+    var dimEnabled: Bool          { data.config!.display!.dimEnabled! }
+    var dimOpacity: Double        { data.config!.display!.dimOpacity! }
 
     func reload() {
         data = MenuConfigLoader.load()

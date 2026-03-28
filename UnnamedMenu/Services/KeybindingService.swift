@@ -49,7 +49,7 @@ final class KeybindingService {
                         NotificationCenter.default.post(name: .menuCycleSelection, object: nil)
                     } else {
                         NotificationCenter.default.post(name: .menuShowPanel, object: nil,
-                            userInfo: ["windows": true, "all": true])
+                            userInfo: ["windows": true, "all": true, "noSearch": true])
                     }
                 }
             }),

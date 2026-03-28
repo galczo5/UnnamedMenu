@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingPipedItems: [CommandItem]?
     private let showAllFlag = CommandLine.arguments.contains("--all")
     private let centerFlag = CommandLine.arguments.contains("--center")
+    private let noSearchFlag = CommandLine.arguments.contains("--no-search")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // CLI-only generators — print JSON and exit, no UI or instance logic needed.
@@ -83,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.pipeConfigNotification),
                     object: nil,
-                    userInfo: ["json": json, "all": showAllFlag ? "1" : "0", "windows": windowsFlag ? "1" : "0", "center": (centerFlag || windowsFlag) ? "1" : "0"],
+                    userInfo: ["json": json, "all": showAllFlag ? "1" : "0", "windows": windowsFlag ? "1" : "0", "center": (centerFlag || windowsFlag) ? "1" : "0", "noSearch": noSearchFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
             } else if let idx = CommandLine.arguments.firstIndex(of: "--config"),
@@ -99,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.showPanelNotification),
                     object: nil,
-                    userInfo: ["all": showAllFlag ? "1" : "0", "center": centerFlag ? "1" : "0"],
+                    userInfo: ["all": showAllFlag ? "1" : "0", "center": centerFlag ? "1" : "0", "noSearch": noSearchFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
             }
@@ -166,6 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
         appState.showAll = showAllFlag
+        appState.noSearch = noSearchFlag
         if let url = pendingConfigURL {
             appState.applyFilter(url: url)
         }
@@ -202,6 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let windows = note.userInfo?["windows"] as? Bool ?? false
             let all = note.userInfo?["all"] as? Bool ?? false
             let center = note.userInfo?["center"] as? Bool ?? false
+            let noSearch = note.userInfo?["noSearch"] as? Bool ?? false
             if windows {
                 // Prefer the background-maintained cache for instant response;
                 // fall back to live enumeration only if the cache is cold.
@@ -221,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             appState.windowsMode = windows
             appState.showAll = all
+            appState.noSearch = noSearch
             showPanel()
             if windows || center {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.centerPanelOnScreen() }
@@ -236,6 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let items = try? JSONDecoder().decode([CommandItem].self, from: data) else { return }
         appState.showAll = note.userInfo?["all"] as? String == "1"
         appState.windowsMode = note.userInfo?["windows"] as? String == "1"
+        appState.noSearch = note.userInfo?["noSearch"] as? String == "1"
         let shouldCenter = note.userInfo?["center"] as? String == "1"
         appState.applyItems(items)
         showPanel()
@@ -253,6 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showPanelFromNotification(_ note: Notification) {
         appState.showAll = note.userInfo?["all"] as? String == "1"
+        appState.noSearch = note.userInfo?["noSearch"] as? String == "1"
         let shouldCenter = note.userInfo?["center"] as? String == "1"
         showPanel()
         if shouldCenter {
@@ -316,8 +322,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sf = screen.visibleFrame
         let pf = panel.frame
         panel.setFrameOrigin(NSPoint(x: sf.midX - pf.width / 2, y: sf.maxY - sf.height * 0.33 - pf.height))
+        panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        DimOverlay.shared.show(screen: screen)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1
+        }
     }
 
     private func centerPanelOnScreen() {

@@ -8,6 +8,7 @@ final class AppState: ObservableObject {
     @Published var pipedItems: [CommandItem]? = nil
     @Published var showAll: Bool = false
     @Published var windowsMode: Bool = false
+    @Published var noSearch: Bool = false
 
     private var itemsByURL: [URL: [CommandItem]] = [:]
 
@@ -43,5 +44,6 @@ final class AppState: ObservableObject {
         pipedItems = nil
         showAll = false
         windowsMode = false
+        noSearch = false
     }
 }

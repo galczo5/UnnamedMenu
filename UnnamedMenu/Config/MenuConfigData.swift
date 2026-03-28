@@ -19,6 +19,8 @@ struct MenuConfigData: Codable {
         var searchPlaceholder: String?
         var maxResults: Int?
         var maxResultsAll: Int?
+        var dimEnabled: Bool?
+        var dimOpacity: Double?
     }
 
     static let defaults = MenuConfigData(config: ConfigSection(
@@ -28,7 +30,9 @@ struct MenuConfigData: Codable {
             searchIcon: "magnifyingglass",
             searchPlaceholder: "Search commands…",
             maxResults: 5,
-            maxResultsAll: 25
+            maxResultsAll: 25,
+            dimEnabled: true,
+            dimOpacity: 0.6
         )
     ))
 
@@ -42,6 +46,8 @@ struct MenuConfigData: Codable {
         check(config?.display?.searchPlaceholder,   "config.display.searchPlaceholder")
         check(config?.display?.maxResults,          "config.display.maxResults")
         check(config?.display?.maxResultsAll,       "config.display.maxResultsAll")
+        check(config?.display?.dimEnabled,          "config.display.dimEnabled")
+        check(config?.display?.dimOpacity,          "config.display.dimOpacity")
         return missing
     }
 
@@ -57,7 +63,9 @@ struct MenuConfigData: Codable {
                 searchIcon:        config?.display?.searchIcon        ?? d.display!.searchIcon,
                 searchPlaceholder: config?.display?.searchPlaceholder ?? d.display!.searchPlaceholder,
                 maxResults:        config?.display?.maxResults        ?? d.display!.maxResults,
-                maxResultsAll:     config?.display?.maxResultsAll     ?? d.display!.maxResultsAll
+                maxResultsAll:     config?.display?.maxResultsAll     ?? d.display!.maxResultsAll,
+                dimEnabled:        config?.display?.dimEnabled        ?? d.display!.dimEnabled,
+                dimOpacity:        config?.display?.dimOpacity        ?? d.display!.dimOpacity
             )
         ))
     }

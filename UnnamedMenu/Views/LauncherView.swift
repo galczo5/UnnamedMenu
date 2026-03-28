@@ -20,6 +20,9 @@ struct LauncherView: View {
     }
 
     var filteredCommands: [CommandItem] {
+        if appState.noSearch {
+            return Array(appState.visibleCommands.prefix(maxResults))
+        }
         if debouncedSearch.isEmpty {
             return (appState.showAll || appState.windowsMode) ? Array(appState.visibleCommands.prefix(maxResults)) : []
         }
@@ -36,29 +39,31 @@ struct LauncherView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Search bar
-            HStack(spacing: 10) {
-                Image(systemName: MenuConfig.shared.searchIcon)
-                    .foregroundStyle(.secondary)
-                    .font(.system(size: 18, weight: .medium))
+            if !appState.noSearch {
+                // Search bar
+                HStack(spacing: 10) {
+                    Image(systemName: MenuConfig.shared.searchIcon)
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 18, weight: .medium))
 
-                TextField(MenuConfig.shared.searchPlaceholder, text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 18))
-                    .focused($isSearchFocused)
-                    .onSubmit { runSelected() }
-                    .onChange(of: searchText) {
-                        selectedIndex = 0
-                        debounceTask?.cancel()
-                        let task = DispatchWorkItem { debouncedSearch = searchText }
-                        debounceTask = task
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: task)
-                    }
+                    TextField(MenuConfig.shared.searchPlaceholder, text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 18))
+                        .focused($isSearchFocused)
+                        .onSubmit { runSelected() }
+                        .onChange(of: searchText) {
+                            selectedIndex = 0
+                            debounceTask?.cancel()
+                            let task = DispatchWorkItem { debouncedSearch = searchText }
+                            debounceTask = task
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: task)
+                        }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
+                Divider()
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-
-            Divider()
 
             // Command list
             ScrollViewReader { proxy in
@@ -147,7 +152,16 @@ struct LauncherView: View {
     private func hideWindow() {
         KeybindingService.shared.clearHeldModifiers()
         appState.clearFilter()
-        NSApp.keyWindow?.close()
+        guard let window = NSApp.keyWindow else { return }
+        DimOverlay.shared.hide()
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.1
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            window.animator().alphaValue = 0
+        }, completionHandler: {
+            window.orderOut(nil)
+            window.alphaValue = 1
+        })
     }
 }
 

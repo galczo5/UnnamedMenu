@@ -71,6 +71,10 @@ struct MenuConfigLoader {
             maxResults: \(di.maxResults ?? d.display!.maxResults!)
             # Maximum results shown in show-all / windows mode
             maxResultsAll: \(di.maxResultsAll ?? d.display!.maxResultsAll!)
+            # Dim the screen behind the launcher panel
+            dimEnabled: \(di.dimEnabled ?? d.display!.dimEnabled!)
+            # Opacity of the dim overlay (0.0 = invisible, 1.0 = fully black)
+            dimOpacity: \(di.dimOpacity ?? d.display!.dimOpacity!)
         """
     }
 }
