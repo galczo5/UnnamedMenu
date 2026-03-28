@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingConfigURL: URL?
     private var pendingPipedItems: [CommandItem]?
     private let showAllFlag = CommandLine.arguments.contains("--all")
+    private let centerFlag = CommandLine.arguments.contains("--center")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // CLI-only generators — print JSON and exit, no UI or instance logic needed.
@@ -82,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.pipeConfigNotification),
                     object: nil,
-                    userInfo: ["json": json, "all": showAllFlag ? "1" : "0", "windows": windowsFlag ? "1" : "0"],
+                    userInfo: ["json": json, "all": showAllFlag ? "1" : "0", "windows": windowsFlag ? "1" : "0", "center": (centerFlag || windowsFlag) ? "1" : "0"],
                     deliverImmediately: true
                 )
             } else if let idx = CommandLine.arguments.firstIndex(of: "--config"),
@@ -98,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.showPanelNotification),
                     object: nil,
-                    userInfo: ["all": showAllFlag ? "1" : "0"],
+                    userInfo: ["all": showAllFlag ? "1" : "0", "center": centerFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
             }
@@ -173,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.windowsMode = windowsFlag
         }
         showPanel()
-        if windowsFlag {
+        if windowsFlag || centerFlag {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.centerPanelOnScreen() }
         }
 
@@ -200,6 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let windows = note.userInfo?["windows"] as? Bool ?? false
             let all = note.userInfo?["all"] as? Bool ?? false
+            let center = note.userInfo?["center"] as? Bool ?? false
             if windows {
                 // Prefer the background-maintained cache for instant response;
                 // fall back to live enumeration only if the cache is cold.
@@ -220,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.windowsMode = windows
             appState.showAll = all
             showPanel()
-            if windows {
+            if windows || center {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.centerPanelOnScreen() }
             }
         }
@@ -234,9 +236,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let items = try? JSONDecoder().decode([CommandItem].self, from: data) else { return }
         appState.showAll = note.userInfo?["all"] as? String == "1"
         appState.windowsMode = note.userInfo?["windows"] as? String == "1"
+        let shouldCenter = note.userInfo?["center"] as? String == "1"
         appState.applyItems(items)
         showPanel()
-        if appState.windowsMode {
+        if shouldCenter {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.centerPanelOnScreen() }
         }
     }
@@ -250,7 +253,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showPanelFromNotification(_ note: Notification) {
         appState.showAll = note.userInfo?["all"] as? String == "1"
+        let shouldCenter = note.userInfo?["center"] as? String == "1"
         showPanel()
+        if shouldCenter {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.centerPanelOnScreen() }
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
