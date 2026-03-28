@@ -5,8 +5,11 @@ struct CommandItem: Identifiable, Decodable {
     let name: String
     let command: String
     let systemImage: String
+    let pid: String?
+    let windowTitle: String?
+    let wid: String?
 
     private enum CodingKeys: String, CodingKey {
-        case name, command, systemImage
+        case name, command, systemImage, pid, windowTitle, wid
     }
 }

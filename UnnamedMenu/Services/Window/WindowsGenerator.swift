@@ -116,7 +116,7 @@ struct WindowsGenerator {
             }
 
             if axWindows.isEmpty {
-                items.append(["name": appName, "command": command, "systemImage": iconValue])
+                items.append(["name": appName, "command": command, "pid": "\(pid)", "systemImage": iconValue])
             } else {
                 var seenTitles = Set<String>()
                 for window in axWindows {
@@ -125,7 +125,11 @@ struct WindowsGenerator {
                     let windowTitle = titleValue as? String ?? ""
                     guard seenTitles.insert(windowTitle).inserted else { continue }
                     let name = windowTitle.isEmpty ? appName : "\(appName) - \(windowTitle)"
-                    items.append(["name": name, "command": command, "systemImage": iconValue])
+                    var item = ["name": name, "command": command, "pid": "\(pid)", "windowTitle": windowTitle, "systemImage": iconValue]
+                    var wid = CGWindowID(0)
+                    _AXUIElementGetWindow(window, &wid)
+                    if wid != 0 { item["wid"] = "\(wid)" }
+                    items.append(item)
                 }
             }
         }

@@ -24,6 +24,7 @@ enum WindowCache {
     /// Reorder cached items by current visit history (always fresh, updated synchronously on main thread).
     static func reorderedByVisitHistory(_ items: [[String: String]]) -> [[String: String]] {
         func pid(from item: [String: String]) -> pid_t {
+            if let p = item["pid"] { return pid_t(p) ?? 0 }
             guard let cmd = item["command"],
                   let range = cmd.range(of: "(?<=unix id is )\\d+", options: .regularExpression) else { return 0 }
             return pid_t(cmd[range]) ?? 0

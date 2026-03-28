@@ -15,9 +15,13 @@ struct LauncherView: View {
     @State private var debounceTask: DispatchWorkItem? = nil
     @State private var selectedIndex = 0
     @FocusState private var isSearchFocused: Bool
+    private var maxResults: Int {
+        (appState.showAll || appState.windowsMode) ? 25 : 5
+    }
+
     var filteredCommands: [CommandItem] {
         if debouncedSearch.isEmpty {
-            return appState.showAll ? appState.visibleCommands : []
+            return (appState.showAll || appState.windowsMode) ? Array(appState.visibleCommands.prefix(maxResults)) : []
         }
         let scored = appState.visibleCommands
             .compactMap { item -> (score: Double, item: CommandItem)? in
@@ -27,7 +31,7 @@ struct LauncherView: View {
                 return (best, item)
             }
             .sorted { $0.score > $1.score }
-        return appState.showAll ? scored.map { $0.item } : Array(scored.prefix(5).map { $0.item })
+        return Array(scored.prefix(maxResults).map { $0.item })
     }
 
     var body: some View {
@@ -71,7 +75,7 @@ struct LauncherView: View {
                     }
                 }
                 .scrollIndicators(.never)
-                .frame(height: min(CGFloat(filteredCommands.count) * 46, 270))
+                .frame(height: min(CGFloat(filteredCommands.count) * 46, CGFloat(maxResults) * 46))
                 .onChange(of: selectedIndex) { _, newIndex in
                     guard filteredCommands.indices.contains(newIndex) else { return }
                     withAnimation {
@@ -121,9 +125,15 @@ struct LauncherView: View {
 
     private func runSelected() {
         guard filteredCommands.indices.contains(selectedIndex) else { return }
-        let command = filteredCommands[selectedIndex].command
+        let item = filteredCommands[selectedIndex]
+        print("[runSelected] name=\"\(item.name)\" pid=\(item.pid ?? "nil") wid=\(item.wid ?? "nil") windowTitle=\(item.windowTitle ?? "nil")")
         hideWindow()
-        try? CommandRunner.run(command)
+        if let pidStr = item.pid, let pid = pid_t(pidStr) {
+            let wid = CGWindowID(item.wid ?? "0") ?? 0
+            WindowFocuser.focus(pid: pid, windowTitle: item.windowTitle ?? "", targetWid: wid)
+        } else {
+            try? CommandRunner.run(item.command)
+        }
     }
 
     private func hideWindow() {

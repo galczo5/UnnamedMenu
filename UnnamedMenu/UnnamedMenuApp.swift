@@ -82,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DistributedNotificationCenter.default().postNotificationName(
                     NSNotification.Name(AppDelegate.pipeConfigNotification),
                     object: nil,
-                    userInfo: ["json": json, "all": showAllFlag ? "1" : "0"],
+                    userInfo: ["json": json, "all": showAllFlag ? "1" : "0", "windows": windowsFlag ? "1" : "0"],
                     deliverImmediately: true
                 )
             } else if let idx = CommandLine.arguments.firstIndex(of: "--config"),
@@ -164,14 +164,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.hasShadow = true
         panel.isReleasedWhenClosed = false
         panel.isMovableByWindowBackground = true
-        showPanel()
-
         appState.showAll = showAllFlag
         if let url = pendingConfigURL {
             appState.applyFilter(url: url)
         }
         if let items = pendingPipedItems {
             appState.applyItems(items)
+            appState.windowsMode = windowsFlag
+        }
+        showPanel()
+        if windowsFlag {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.centerPanelOnScreen() }
         }
 
         DistributedNotificationCenter.default().addObserver(
@@ -214,8 +217,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     appState.applyItems(decoded)
                 }
             }
+            appState.windowsMode = windows
             appState.showAll = all
             showPanel()
+            if windows {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.centerPanelOnScreen() }
+            }
         }
 
         KeybindingService.shared.start()
@@ -226,8 +233,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let data = json.data(using: .utf8),
               let items = try? JSONDecoder().decode([CommandItem].self, from: data) else { return }
         appState.showAll = note.userInfo?["all"] as? String == "1"
+        appState.windowsMode = note.userInfo?["windows"] as? String == "1"
         appState.applyItems(items)
         showPanel()
+        if appState.windowsMode {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.centerPanelOnScreen() }
+        }
     }
 
     @objc private func filterConfigFromNotification(_ note: Notification) {
@@ -258,6 +269,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let generate = NSMenuItem(title: "Generate applications.json", action: #selector(generateApplicationsJSON), keyEquivalent: "")
         generate.target = self
         menu.addItem(generate)
+
+        if appState.loadedFileNames.isEmpty {
+            let none = NSMenuItem(title: "No config files loaded", action: nil, keyEquivalent: "")
+            none.isEnabled = false
+            menu.addItem(none)
+        } else {
+            for name in appState.loadedFileNames {
+                let item = NSMenuItem(title: name, action: #selector(openLoadedFile(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = MenuLoader.configURL.appendingPathComponent(name)
+                menu.addItem(item)
+            }
+        }
         menu.addItem(.separator())
 
         let openConfig = NSMenuItem(title: "Open config file", action: #selector(openConfigFile), keyEquivalent: "")
@@ -275,19 +299,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let quit = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
-        menu.addItem(.separator())
-
-        if appState.loadedFileNames.isEmpty {
-            let none = NSMenuItem(title: "No config files loaded", action: nil, keyEquivalent: "")
-            none.isEnabled = false
-            menu.addItem(none)
-        } else {
-            for name in appState.loadedFileNames {
-                let item = NSMenuItem(title: name, action: nil, keyEquivalent: "")
-                item.isEnabled = false
-                menu.addItem(item)
-            }
-        }
 
         statusItem.menu = menu
     }
@@ -300,6 +311,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.setFrameOrigin(NSPoint(x: sf.midX - pf.width / 2, y: sf.maxY - sf.height * 0.33 - pf.height))
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func centerPanelOnScreen() {
+        let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
+        let sf = screen.visibleFrame
+        let pf = panel.frame
+        panel.setFrameOrigin(NSPoint(x: sf.midX - pf.width / 2, y: sf.midY - pf.height / 2))
     }
 
     @objc private func openPanel() {
@@ -321,6 +339,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MenuConfigLoader.write(MenuConfigData.defaults)
         MenuConfig.shared.reload()
         KeybindingService.shared.restart()
+    }
+
+    @objc private func openLoadedFile(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func generateApplicationsJSON() {
