@@ -16,7 +16,7 @@ struct LauncherView: View {
     @State private var selectedIndex = 0
     @FocusState private var isSearchFocused: Bool
     private var maxResults: Int {
-        (appState.showAll || appState.windowsMode) ? 25 : 5
+        (appState.showAll || appState.windowsMode) ? MenuConfig.shared.maxResultsAll : MenuConfig.shared.maxResults
     }
 
     var filteredCommands: [CommandItem] {
@@ -38,11 +38,11 @@ struct LauncherView: View {
         VStack(spacing: 0) {
             // Search bar
             HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
+                Image(systemName: MenuConfig.shared.searchIcon)
                     .foregroundStyle(.secondary)
                     .font(.system(size: 18, weight: .medium))
 
-                TextField("Search commands…", text: $searchText)
+                TextField(MenuConfig.shared.searchPlaceholder, text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 18))
                     .focused($isSearchFocused)
@@ -90,9 +90,17 @@ struct LauncherView: View {
                     .preference(key: WindowHeightKey.self, value: geo.size.height)
             }
         )
-        .background(VisualEffectView())
+        .background(VisualEffectView(theme: MenuConfig.shared.theme))
+        .preferredColorScheme({
+            switch MenuConfig.shared.theme {
+            case "dark":  return .dark
+            case "light": return .light
+            default:      return nil
+            }
+        }())
         .frame(width: 600)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.35), radius: 24, y: 8)
         .onPreferenceChange(WindowHeightKey.self) { height in
             guard height > 0, let window = NSApp.keyWindow else { return }
             var frame = window.frame

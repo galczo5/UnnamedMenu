@@ -48,6 +48,7 @@ struct MenuConfigLoader {
     private static func format(_ data: MenuConfigData) -> String {
         let d = MenuConfigData.defaults.config!
         let sh = data.config?.shortcuts ?? d.shortcuts!
+        let di = data.config?.display ?? d.display!
 
         return """
         config:
@@ -57,6 +58,19 @@ struct MenuConfigLoader {
             open: "\(sh.open ?? d.shortcuts!.open!)"
             # Global shortcut to open UnnamedMenu in windows mode. When already open, cycles selection. Empty string disables.
             openWindows: "\(sh.openWindows ?? d.shortcuts!.openWindows!)"
+          display:
+            # Colour scheme: light, dark, system
+            theme: "\(di.theme ?? d.display!.theme!)"
+            # SF Symbol name shown left of the search field.
+            # Browse available icons in the SF Symbols app (install from https://developer.apple.com/sf-symbols/)
+            # or run: open "/System/Applications/SF Symbols.app"
+            searchIcon: "\(di.searchIcon ?? d.display!.searchIcon!)"
+            # Placeholder text in the search field
+            searchPlaceholder: "\(di.searchPlaceholder ?? d.display!.searchPlaceholder!)"
+            # Maximum results shown in search mode
+            maxResults: \(di.maxResults ?? d.display!.maxResults!)
+            # Maximum results shown in show-all / windows mode
+            maxResultsAll: \(di.maxResultsAll ?? d.display!.maxResultsAll!)
         """
     }
 }
