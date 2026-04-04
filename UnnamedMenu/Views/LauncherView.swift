@@ -8,6 +8,11 @@ private struct WindowHeightKey: PreferenceKey {
     }
 }
 
+private struct WindowGroup {
+    let pid: String
+    let entries: [(flatIndex: Int, item: CommandItem)]
+}
+
 struct LauncherView: View {
     @EnvironmentObject var appState: AppState
     @State private var searchText = ""
@@ -17,6 +22,34 @@ struct LauncherView: View {
     @FocusState private var isSearchFocused: Bool
     private var maxResults: Int {
         (appState.showAll || appState.windowsMode) ? MenuConfig.shared.maxResultsAll : MenuConfig.shared.maxResults
+    }
+
+    private var shouldGroup: Bool {
+        appState.windowsMode && debouncedSearch.isEmpty
+    }
+
+    private var groupedWindows: [WindowGroup] {
+        var pidOrder: [String] = []
+        var pidEntries: [String: [(Int, CommandItem)]] = [:]
+
+        for (i, item) in filteredCommands.enumerated() {
+            let pid = item.pid ?? ""
+            if pidEntries[pid] == nil {
+                pidOrder.append(pid)
+                pidEntries[pid] = []
+            }
+            pidEntries[pid]!.append((i, item))
+        }
+
+        return pidOrder.map { pid in
+            WindowGroup(pid: pid, entries: pidEntries[pid]!)
+        }
+    }
+
+    private var listHeight: CGFloat {
+        let rowH: CGFloat = 46
+        let maxH = CGFloat(maxResults) * rowH
+        return min(CGFloat(filteredCommands.count) * rowH, maxH)
     }
 
     var filteredCommands: [CommandItem] {
@@ -69,18 +102,33 @@ struct LauncherView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(filteredCommands.enumerated()), id: \.element.id) { index, item in
-                            CommandRow(item: item, isSelected: index == selectedIndex)
-                                .id(item.id)
-                                .onTapGesture {
-                                    selectedIndex = index
-                                    runSelected()
+                        if shouldGroup {
+                            ForEach(groupedWindows, id: \.pid) { group in
+                                ForEach(0..<group.entries.count, id: \.self) { ei in
+                                    let (flatIdx, item) = group.entries[ei]
+                                    let winTitle = item.windowTitle.flatMap { $0.isEmpty ? nil : $0 }
+                                    CommandRow(item: item, isSelected: flatIdx == selectedIndex, displayName: winTitle)
+                                        .id(item.id)
+                                        .onTapGesture {
+                                            selectedIndex = flatIdx
+                                            runSelected()
+                                        }
                                 }
+                            }
+                        } else {
+                            ForEach(Array(filteredCommands.enumerated()), id: \.element.id) { index, item in
+                                CommandRow(item: item, isSelected: index == selectedIndex)
+                                    .id(item.id)
+                                    .onTapGesture {
+                                        selectedIndex = index
+                                        runSelected()
+                                    }
+                            }
                         }
                     }
                 }
                 .scrollIndicators(.never)
-                .frame(height: min(CGFloat(filteredCommands.count) * 46, CGFloat(maxResults) * 46))
+                .frame(height: listHeight)
                 .onChange(of: selectedIndex) { _, newIndex in
                     guard filteredCommands.indices.contains(newIndex) else { return }
                     withAnimation {
@@ -165,9 +213,11 @@ struct LauncherView: View {
     }
 }
 
+
 private struct CommandRow: View {
     let item: CommandItem
     let isSelected: Bool
+    var displayName: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -182,7 +232,7 @@ private struct CommandRow: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
+                Text(displayName ?? item.name)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(isSelected ? .white : Color(nsColor: .labelColor))
                 Text(item.command)
